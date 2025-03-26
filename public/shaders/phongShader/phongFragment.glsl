@@ -23,7 +23,12 @@ varying highp vec3 vNormal;
 #define EPS 1e-3
 #define PI 3.141592653589793
 #define PI2 6.283185307179586
-
+#define SHADOW_MAP_SIZE 2048.
+#define FRUSTUM_SIZE  400.
+#define FILTER_RADIUS 10.
+#define NEAR_PLANE 0.01
+#define LIGHT_WORLD_SIZE 5.
+#define LIGHT_SIZE_UV LIGHT_WORLD_SIZE / FRUSTUM_SIZE
 uniform sampler2D uShadowMap;
 
 varying vec4 vPositionFromLight;
@@ -83,30 +88,77 @@ void uniformDiskSamples( const in vec2 randomSeed ) {
   }
 }
 
-float findBlocker( sampler2D shadowMap,  vec2 uv, float zReceiver ) {
-	return 1.0;
+
+float findBlocker(sampler2D shadowMap, vec2 uv, float zReceiver) {
+  int blockerNum = 0;
+  float blockDepth = 0.;
+
+  float posZFromLight = vPositionFromLight.z;
+
+  float searchRadius = LIGHT_SIZE_UV * (posZFromLight - NEAR_PLANE) / posZFromLight;
+
+  poissonDiskSamples(uv);
+  for(int i = 0; i < NUM_SAMPLES; i++){
+    float shadowDepth = unpack(texture2D(shadowMap, uv + poissonDisk[i] * searchRadius));
+    if(zReceiver > shadowDepth){
+      blockerNum++;
+      blockDepth += shadowDepth;
+    }
+  }
+
+  if(blockerNum == 0)
+    return -1.;
+  else
+    return blockDepth / float(blockerNum);
+}
+float getShadowBias(float c, float filterRadiusUV){
+  vec3 normal = normalize(vNormal);
+  vec3 lightDir = normalize(uLightPos - vFragPos);
+  float fragSize = (1. + ceil(filterRadiusUV)) * (FRUSTUM_SIZE / SHADOW_MAP_SIZE / 2.);
+  return max(fragSize, fragSize * (1.0 - dot(normal, lightDir))) * c;
+}
+float useShadowMap(sampler2D shadowMap, vec4 shadowCoord, float biasC, float filterRadiusUV){
+  float depth = unpack(texture2D(shadowMap, shadowCoord.xy));
+  float cur_depth = shadowCoord.z;
+  float bias = getShadowBias(biasC, filterRadiusUV);
+  if(cur_depth - bias >= depth + EPS){
+    return 0.;
+  }
+  else{
+    return 1.0;
+  }
+}
+float PCF(sampler2D shadowMap, vec4 coords, float biasC, float filterRadiusUV) {
+  //uniformDiskSamples(coords.xy);
+  poissonDiskSamples(coords.xy); //使用xy坐标作为随机种子生成
+  float visibility = 0.0;
+  for(int i = 0; i < NUM_SAMPLES; i++){
+    vec2 offset = poissonDisk[i] * filterRadiusUV;
+    float shadowDepth = useShadowMap(shadowMap, coords + vec4(offset, 0., 0.), biasC, filterRadiusUV);
+    if(coords.z > shadowDepth + EPS){
+      visibility++;
+    }
+  }
+  return 1.0 - visibility / float(NUM_SAMPLES);
 }
 
-float PCF(sampler2D shadowMap, vec4 coords) {
-  return 1.0;
-}
+float PCSS(sampler2D shadowMap, vec4 coords, float biasC){
+  float zReceiver = coords.z;
 
-float PCSS(sampler2D shadowMap, vec4 coords){
+  // STEP 1: avgblocker depth 
+  float avgBlockerDepth = findBlocker(shadowMap, coords.xy, zReceiver);
 
-  // STEP 1: avgblocker depth
+  if(avgBlockerDepth < -EPS)
+    return 1.0;
 
   // STEP 2: penumbra size
+  float penumbra = (zReceiver - avgBlockerDepth) * LIGHT_SIZE_UV / avgBlockerDepth;
+  float filterRadiusUV = penumbra;
 
   // STEP 3: filtering
-  
-  return 1.0;
-
+  return PCF(shadowMap, coords, biasC, filterRadiusUV);
 }
 
-
-float useShadowMap(sampler2D shadowMap, vec4 shadowCoord){
-  return 1.0;
-}
 
 vec3 blinnPhong() {
   vec3 color = texture2D(uSampler, vTextureCoord).rgb;
@@ -132,14 +184,27 @@ vec3 blinnPhong() {
 }
 
 void main(void) {
+  //vPositionFromLight为光源空间下投影的裁剪坐标，除以w结果为NDC坐标
+  vec3 shadowCoord = vPositionFromLight.xyz / vPositionFromLight.w;
+  //把[-1,1]的NDC坐标转换为[0,1]的坐标
+  shadowCoord.xyz = (shadowCoord.xyz + 1.0) / 2.0;
 
-  float visibility;
-  //visibility = useShadowMap(uShadowMap, vec4(shadowCoord, 1.0));
-  //visibility = PCF(uShadowMap, vec4(shadowCoord, 1.0));
-  //visibility = PCSS(uShadowMap, vec4(shadowCoord, 1.0));
+  float visibility = 1.;
+
+  // 无PCF时的Shadow Bias
+  float nonePCFBiasC = .4;
+  // 有PCF时的Shadow Bias
+  float pcfBiasC = .2;
+  // PCF的采样范围，因为是在Shadow Map上采样，需要除以Shadow Map大小，得到uv坐标上的范围
+  float filterRadiusUV = FILTER_RADIUS / SHADOW_MAP_SIZE;
+
+  // 硬阴影无PCF，最后参数传0
+  //visibility = useShadowMap(uShadowMap, vec4(shadowCoord, 1.0), nonePCFBiasC, 0.);
+  // visibility = PCF(uShadowMap, vec4(shadowCoord, 1.0), pcfBiasC, filterRadiusUV);
+  visibility = PCSS(uShadowMap, vec4(shadowCoord, 1.0), pcfBiasC);
 
   vec3 phongColor = blinnPhong();
 
-  //gl_FragColor = vec4(phongColor * visibility, 1.0);
-  gl_FragColor = vec4(phongColor, 1.0);
+  gl_FragColor = vec4(phongColor * visibility, 1.0);
+  //gl_FragColor = vec4(phongColor, 1.0);
 }

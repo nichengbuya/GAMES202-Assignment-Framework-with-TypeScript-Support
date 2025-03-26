@@ -35,21 +35,39 @@ export class DirectionalLight {
         }
     }
 
-    CalcLightMVP(translate: vec3, scale: vec3) {
-        let lightMVP = mat4.create();
-        let modelMatrix = mat4.create();
-        let viewMatrix = mat4.create();
-        let projectionMatrix = mat4.create();
+CalcLightMVP(translate: vec3, scale: vec3) {  
+    let lightMVP = mat4.create();  
+    let modelMatrix = mat4.create();  
+    let viewMatrix = mat4.create();  
+    let projectionMatrix = mat4.create();  
 
-        // Model transform
+    //https://glmatrix.net/docs/module-mat4.html
 
-        // View transform
+    //Edit Start  
 
-        // Projection transform
+    // Model transform  
+    mat4.translate(modelMatrix, modelMatrix, translate)  
+    mat4.scale(modelMatrix, modelMatrix, scale)  
 
-        mat4.multiply(lightMVP, projectionMatrix, viewMatrix);
-        mat4.multiply(lightMVP, lightMVP, modelMatrix);
+    // View transform  
+    mat4.lookAt(viewMatrix, this.lightPos, this.focalPoint, this.lightUp)  
 
-        return lightMVP;
-    }
+    // Projection transform  
+    var r = 100;  
+    var l = -r;  
+    var t = 100;  
+    var b = -t;  
+
+    var n = 0.01;  
+    var f = 200;  
+
+    mat4.ortho(projectionMatrix, l, r, b, t, n, f);  
+
+    //Edit End  
+
+    mat4.multiply(lightMVP, projectionMatrix, viewMatrix);  
+    mat4.multiply(lightMVP, lightMVP, modelMatrix);  
+
+    return lightMVP;  
+}
 }

@@ -39,7 +39,11 @@ type Uniform =
     | {
           type: "updatedInRealTime";
           value: boolean | null;
-      };
+      }
+    | {
+          type: "precomputeL";
+          value: any;
+    };
 
 export class Material {
     private flatten_uniforms;

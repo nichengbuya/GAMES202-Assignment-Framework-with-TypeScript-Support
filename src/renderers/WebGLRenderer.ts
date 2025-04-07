@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { MeshRender } from "./MeshRender";
 import { mat4 } from "gl-matrix";
 import { LightType } from '../lights/Light';
+import { guiParams, precomputeL, precomputeLT } from "../engine";
+import { getMat3ValueFromRGB, getRotationPrecomputeL } from "../utils/tools";
 
 
 export class WebGLRenderer {
@@ -83,7 +85,22 @@ export class WebGLRenderer {
                     }
 
                     // Bonus - Fast Spherical Harmonic Rotation
-                    //let precomputeL_RGBMat3 = getRotationPrecomputeL(precomputeL[guiParams.envmapId], cameraModelMatrix);
+                    let precomputeL_RGBMat3 = getRotationPrecomputeL(precomputeL[guiParams.envmapId], cameraModelMatrix);
+                    
+                    // Edit Start
+                    // let Mat3Value = getMat3ValueFromRGB(precomputeL[guiParams.envmapId])
+                    let Mat3Value = getMat3ValueFromRGB(precomputeL_RGBMat3);
+                    
+                    for(let j = 0;j< 3 ; j++){
+                        if( k === `uPrecomputeL[${j}]`){
+                            gl.uniformMatrix3fv(
+                                this.meshes[i].shader.program.uniforms[k],
+                                false,
+                                Mat3Value[j]
+                            );
+                        }
+                    }
+                    // Edit End
                 }
 
                 this.meshes[i].draw(this.camera);

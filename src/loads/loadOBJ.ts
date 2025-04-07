@@ -12,6 +12,7 @@ import { MeshRender } from "../renderers/MeshRender";
 import { vec3 } from "gl-matrix";
 import { buildSkyBoxMaterial } from "../materials/SkyBoxMaterial";
 import { Transform } from "../engine";
+import { buildPRTMaterial } from "../materials/PRTMaterial";
 
 export function loadOBJ(
     renderer: WebGLRenderer,
@@ -136,7 +137,9 @@ export function loadOBJ(
                                         );
                                         break;
                                     // TODO: Add your PRTmaterial here
-
+                                    case "PRTMaterial":
+                                        material = buildPRTMaterial();
+                                        break;
                                     case "SkyBoxMaterial":
                                         material = buildSkyBoxMaterial(
                                             "./shaders/skyBoxShader/SkyBoxVertex.glsl",
